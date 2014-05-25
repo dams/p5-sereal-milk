@@ -8,6 +8,15 @@ use Carp;
 use autodie qw(read seek binmode);
 use Sereal::Encoder::Constants qw(:all);
 
-use Sereal::Milk::Document::Body;
+has _fh => (
+  is => 'ro',
+  required => 1,
+);
+
+has _start_pos => (
+  is => 'ro',
+  required => 1,
+);
+
 
 1;

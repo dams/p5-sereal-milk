@@ -59,8 +59,8 @@ sub load {
         $opt_suffix_size--;
         ord($bitfield) & SRL_PROTOCOL_HDR_USER_DATA
           and $self->user_data(
-                Sereal::Milk::Document::Body->new( fh => $fh,
-                                                   pos => $fh->get_pos,
+                Sereal::Milk::Document::Body->new( _fh => $fh,
+                                                   _start_pos => $fh->get_pos,
                                                  )->load()
           );
     }

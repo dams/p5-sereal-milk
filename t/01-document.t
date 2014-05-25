@@ -8,11 +8,20 @@ use Sereal::Milk::Document;
 use Sereal::Encoder;
 my $encoder = Sereal::Encoder->new();
 
-my $data = $encoder->encode("plop");
+{
+    my $data1 = $encoder->encode("plop");
+    my $data2 = $encoder->encode("plip");
 
-my $doc = Sereal::Milk::Document->new(source => \$data);
+    my $doc1 = Sereal::Milk::Document->new(source => \$data1);
+    my $doc2 = Sereal::Milk::Document->new(source => \$data2);
 
-use Data::Dumper;
+    use Data::Dumper;
+    print Dumper($doc1);
 
-print Dumper($doc);
+    $doc1->append($doc2);
+    
+    is($doc1->decode(""), "plopplip");
+
+}
+
 done_testing;
