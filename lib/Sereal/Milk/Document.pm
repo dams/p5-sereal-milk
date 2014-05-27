@@ -103,6 +103,22 @@ has body => (
   },
 );
 
+sub get_uncompressed_body_data {
+      my ($self) = @_;
+
+      my $fh = $self->_fh;
+      my $original_pos = $fh->getpos;
+      $fh->seek($self->_start_pos + $self->header->length, 0);
+      my $maybe_compressed_data = _slurp($fh, $self->header->snappy_length);
+      $fh->setpos($original_pos);
+
+      $self->header->encoding_type_is_snappy
+        or return $maybe_compressed_data;
+
+      require Compress::Snappy;
+      return Compress::Snappy::decompress($maybe_compressed_data);
+}
+
 sub _slurp {
     my ($fh, $length) = @_;
     if (!$length) {
