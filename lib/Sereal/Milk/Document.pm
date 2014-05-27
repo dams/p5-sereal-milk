@@ -3,9 +3,10 @@ package Sereal::Milk::Document;
 use 5.10.1;
 
 use Moo;
+use MooX::StrictConstructor;
 
 use Type::Params qw( compile );
-use Types::Standard qw( Object InstanceOf slurpy );
+use Types::Standard qw( Object InstanceOf ArrayRef slurpy );
 
 use Carp;
 use autodie qw(read seek binmode);
@@ -61,16 +62,51 @@ has header => (
   },
 );
 
-has body => (
+has raw_body => (
   is => 'ro',
   lazy => 1,
   builder => sub {
       my ($self) = @_;
       Sereal::Milk::Document::Body->new( _fh => $self->_fh,
-                                         _start_pos => $self->_start_pos,
+                                         _start_pos => $self->_start_pos + $self->header->length,
+                                         is_compressed => $self->header->encoding_type_is_snappy,
                                        );
   },
 );
+
+has body => (
+  is => 'ro',
+  lazy => 1,
+  builder => sub {
+      my ($self) = @_;
+
+      $self->header->encoding_type_is_snappy
+        or return $self->raw_body;
+
+      my $fh = $self->_fh;
+      my $pos = $fh->getpos;
+      $fh->seek($self->_start_pos + $self->header->length, 0);
+      my $compressed_data = _slurp($fh, $self->header->snappy_length);
+      require Compress::Snappy;
+      my $data = Compress::Snappy::decompress($compressed_data);
+
+      Sereal::Milk::Document::Body->new( _fh => \$data,
+                                         _start_pos => 0,
+                                         is_compressed => 0,
+                                       );
+  },
+);
+
+sub _slurp {
+    my ($fh, $length) = @_;
+    if (!$length) {
+        local $/;
+        return scalar(<$fh>);
+    }
+    $fh->read(my $data, $length);
+    return $data;
+}
+
 
 sub BUILD {
     my ($self) = @_;
@@ -87,12 +123,7 @@ sub decode {
     my ($self) = @_;
     my $structure;
 
-    use Mmap;
-    mmap(my $temp, 0, PROT_READ, 0, $self->_fh, $self->_start_pos)
-      or croak "mmap: $!";
-    $self->_decoder->decode($temp, my $structure);
-    munmap($temp)
-      or die "munmap: $!";
+#    $self->_decoder->decode($temp, my $structure);
 
     return $structure;
 }
