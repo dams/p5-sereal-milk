@@ -84,13 +84,19 @@ has body => (
         or return $self->raw_body;
 
       my $fh = $self->_fh;
-      my $pos = $fh->getpos;
+      my $original_pos = $fh->getpos;
       $fh->seek($self->_start_pos + $self->header->length, 0);
       my $compressed_data = _slurp($fh, $self->header->snappy_length);
+      $fh->setpos($original_pos);
+
       require Compress::Snappy;
       my $data = Compress::Snappy::decompress($compressed_data);
 
-      Sereal::Milk::Document::Body->new( _fh => \$data,
+      $fh = IO::File->new(\$data, 'r+')
+        or croak "failed to open source";
+      $fh->binmode(':raw');
+
+      Sereal::Milk::Document::Body->new( _fh => $fh,
                                          _start_pos => 0,
                                          is_compressed => 0,
                                        );

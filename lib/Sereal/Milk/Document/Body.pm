@@ -8,6 +8,7 @@ use MooX::StrictConstructor;
 use Carp;
 use autodie qw(read seek binmode);
 use Sereal::Encoder::Constants qw(:all);
+use Sereal::Decoder;
 
 has _fh => (
   is => 'ro',
@@ -39,6 +40,14 @@ has is_compressed => (
   required => 1,
 );
 
+# has _fast_decoder => (
+#   is => 'ro',
+#   builder => sub {
+#     Sereal::Decoder->new({ no_bless_objects => 1, }
+#                         );
+#   },
+# );
+
 sub parse {
     my ($self) = @_;
 
@@ -62,5 +71,55 @@ sub _parse_sv {
 }
 
 sub load {}
+
+sub maybe_match_in_strings {
+    my ($self, $regexp) = @_;
+    my $data = _slurp($self->_fh);
+    $data =~ $regexp
+      or return;
+
+    return 1;
+    # we may have a match
+#    $self->_fast_decoder->decode($data, my $structure);
+#    _match_deeply_in_strings($structure, $regexp);
+
+}
+
+sub match_in_strings {
+    my ($self, $regexp) = @_;
+    my $data = _slurp($self->_fh);
+    $data =~ $regexp
+      or return;
+
+    # we may have a match
+    $self->_fast_decoder->decode($data, my $structure);
+    _match_deeply_in_strings($structure, $regexp);
+
+}
+
+sub _slurp {
+    my ($fh, $length) = @_;
+    if (!$length) {
+        local $/;
+        return scalar(<$fh>);
+    }
+    $fh->read(my $data, $length);
+    return $data;
+}
+
+# my $regexp
+# sub _match_deeply_in_strings {
+#     my ($s, $regexp) = @_;
+#     my $r = ref $s;
+#     $r or $coderef->($s);
+#     if ($r eq 'ARRAY') {
+#         _deep_walk($_) foreach @$s;
+#     } elsif ($r eq 'HASH') {
+#         foreach my $k (keys %$s) {
+#             $coderef->($s);
+#             $s->{$k}
+#         }
+#     }
+# }
 
 1;

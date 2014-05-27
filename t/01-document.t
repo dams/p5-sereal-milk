@@ -42,13 +42,19 @@ my $encoder_snappy = Sereal::Encoder->new( { snappy_incr => 1,
 # }
 
 {
-    my $data = $encoder_snappy->encode("a" x 500);
+    my $data = $encoder_snappy->encode([ "a" x 50, { key => "plip" x 50 . "plop" . "foobarbaz" } ]);
     my $doc = Sereal::Milk::Document->new(source => \$data);
 
 #    is($doc->body->length, 1, "body has right size");
     use Data::Dumper;
     print Dumper($doc->header->encoding_type_is_snappy);
 
+    print Dumper($doc);
+    print Dumper($doc->body);
+    print Dumper($doc->raw_body);
+    
+    my $v = $doc->body->maybe_match_in_strings(qr/plup/);
+    print Dumper($v);
 #    is($doc1->decode(""), "plopplip");
 
 }
