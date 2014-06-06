@@ -51,13 +51,15 @@ my $encoder_snappy = Sereal::Encoder->new( { snappy_incr => 1,
 
     print Dumper($doc);
     print Dumper($doc->body);
+    print  "raw body\n";
     print Dumper($doc->raw_body);
     
-    my $v = $doc->body->maybe_match_in_strings(qr/plup/);
-    print Dumper($v);
+    my $body_fh = $doc->_get_uncompressed_body_fh;
+    my $content = do { local $/; scalar(<$body_fh>) };
+    print Dumper($content);
 
-    my $raw_data = $doc->get_uncompressed_body_data();
-    print Dumper($raw_data);
+    # my $raw_data = $doc->_get_uncompressed_body_data();
+    # print Dumper($raw_data);
 #    is($doc1->decode(""), "plopplip");
 
 }

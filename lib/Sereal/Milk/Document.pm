@@ -83,40 +83,39 @@ has body => (
       $self->header->encoding_type_is_snappy
         or return $self->raw_body;
 
-      my $fh = $self->_fh;
-      my $original_pos = $fh->getpos;
-      $fh->seek($self->_start_pos + $self->header->length, 0);
-      my $compressed_data = _slurp($fh, $self->header->snappy_length);
-      $fh->setpos($original_pos);
-
-      require Compress::Snappy;
-      my $data = Compress::Snappy::decompress($compressed_data);
-
-      $fh = IO::File->new(\$data, 'r+')
-        or croak "failed to open source";
-      $fh->binmode(':raw');
-
-      Sereal::Milk::Document::Body->new( _fh => $fh,
+      Sereal::Milk::Document::Body->new( _fh => $self->_get_uncompressed_body_fh,
                                          _start_pos => 0,
                                          is_compressed => 0,
                                        );
   },
 );
 
-sub get_uncompressed_body_data {
+sub _get_uncompressed_body_fh {
       my ($self) = @_;
 
       my $fh = $self->_fh;
       my $original_pos = $fh->getpos;
       $fh->seek($self->_start_pos + $self->header->length, 0);
-      my $maybe_compressed_data = _slurp($fh, $self->header->snappy_length);
+
+      my $body_fh;
+
+      # bug: works for snappy_incr
+      if ($self->header->encoding_type_is_snappy) {
+          my $compressed_data = _slurp($fh, $self->header->snappy_length);
+          require Compress::Snappy;
+          my $uncompressed_data = Compress::Snappy::decompress($compressed_data);
+          $body_fh = IO::File->new(\$uncompressed_data, 'r+')
+            or croak "failed to open body source";
+          $body_fh->binmode(':raw');
+      } else {
+          my $source = $self->source;
+          $body_fh = IO::File->new($source, 'r+')
+            or croak "failed to open source '$source'";
+          $body_fh->binmode(':raw');
+          $body_fh->seek($self->_start_pos + $self->header->length, 0);
+      }
       $fh->setpos($original_pos);
-
-      $self->header->encoding_type_is_snappy
-        or return $maybe_compressed_data;
-
-      require Compress::Snappy;
-      return Compress::Snappy::decompress($maybe_compressed_data);
+      return $body_fh;
 }
 
 sub _slurp {
