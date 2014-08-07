@@ -14,12 +14,42 @@ use autodie qw(read seek binmode);
 use Sereal::Milk::Document::Header;
 use Sereal::Milk::Document::Body;
 
-use Sereal::Decoder;
+use Sereal::Milk::Util qw(:all);
+
+use Sereal::Decoder qw(sereal_decode_with_object);
 
 has _decoder => (
   is => 'ro',
+  lazy => 1,
   builder => sub { Sereal::Decoder->new(); },
 );
+
+has _slurped_content => (
+  is => 'ro',
+  lazy => 1,
+  builder => sub {
+      my ($self) = @_;
+      my $fh = $self->_fh;
+      my $original_pos = $fh->getpos;
+      $fh->seek($self->_start_pos, 0);
+      my $content = slurp($fh);
+
+      $fh->setpos($original_pos);
+      return $content;
+  },
+);
+
+has _decoded_struct => (
+  is => 'ro',
+  lazy => 1,
+  builder => sub {
+      my ($self) = @_;
+      my $structure;
+      sereal_decode_with_object($self->_decoder, $self->_slurped_content, $structure);
+      return $structure;
+  },
+);
+
 
 =attr source
 
@@ -56,21 +86,9 @@ has header => (
   lazy => 1,
   builder => sub {
       my ($self) = @_;
-      Sereal::Milk::Document::Header->new( _fh => $self->_fh,
-                                           _start_pos => $self->_start_pos,
+      Sereal::Milk::Document::Header->new( fh => $self->_fh,
+                                           start_pos => $self->_start_pos,
                                          );
-  },
-);
-
-has raw_body => (
-  is => 'ro',
-  lazy => 1,
-  builder => sub {
-      my ($self) = @_;
-      Sereal::Milk::Document::Body->new( _fh => $self->_fh,
-                                         _start_pos => $self->_start_pos + $self->header->length,
-                                         is_compressed => $self->header->encoding_type_is_snappy,
-                                       );
   },
 );
 
@@ -79,60 +97,17 @@ has body => (
   lazy => 1,
   builder => sub {
       my ($self) = @_;
-
-      $self->header->encoding_type_is_snappy
-        or return $self->raw_body;
-
-      Sereal::Milk::Document::Body->new( _fh => $self->_get_uncompressed_body_fh,
-                                         _start_pos => 0,
-                                         is_compressed => 0,
+        $DB::single = 1;
+      my $start_pos = $self->_start_pos + $self->header->length;
+      Sereal::Milk::Document::Body->new( fh => $self->_fh,
+                                         start_pos => $start_pos,
+                                         encoding_type => $self->header->encoding_type,
+                                         document => $self,
                                        );
   },
 );
 
-sub _get_uncompressed_body_fh {
-      my ($self) = @_;
 
-      my $fh = $self->_fh;
-      my $original_pos = $fh->getpos;
-      $fh->seek($self->_start_pos + $self->header->length, 0);
-
-      my $body_fh;
-
-      # bug: works for snappy_incr
-      if ($self->header->encoding_type_is_snappy) {
-          my $compressed_data = _slurp($fh, $self->header->snappy_length);
-          require Compress::Snappy;
-          my $uncompressed_data = Compress::Snappy::decompress($compressed_data);
-          $body_fh = IO::File->new(\$uncompressed_data, 'r+')
-            or croak "failed to open body source";
-          $body_fh->binmode(':raw');
-      } else {
-          my $source = $self->source;
-          $body_fh = IO::File->new($source, 'r+')
-            or croak "failed to open source '$source'";
-          $body_fh->binmode(':raw');
-          $body_fh->seek($self->_start_pos + $self->header->length, 0);
-      }
-      $fh->setpos($original_pos);
-      return $body_fh;
-}
-
-sub _slurp {
-    my ($fh, $length) = @_;
-    if (!$length) {
-        local $/;
-        return scalar(<$fh>);
-    }
-    $fh->read(my $data, $length);
-    return $data;
-}
-
-
-sub BUILD {
-    my ($self) = @_;
-    $self->header->load;
-}
 
 =method decode
 

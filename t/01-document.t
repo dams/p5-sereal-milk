@@ -5,12 +5,11 @@ use Test::More;
 
 use Sereal::Milk::Document;
 
-use Sereal::Encoder;
+use Sereal::Encoder qw(SRL_ZLIB);
 my $encoder = Sereal::Encoder->new();
-my $encoder_snappy = Sereal::Encoder->new( { snappy_incr => 1,
-                                             snappy_threshold => 0,
-                                           }
-                                         );
+my $encoder_zlib = Sereal::Encoder->new( { compress => SRL_ZLIB,
+                                         }
+                                       );
 
 # {
 #     my $data1 = $encoder->encode("plop");
@@ -42,21 +41,27 @@ my $encoder_snappy = Sereal::Encoder->new( { snappy_incr => 1,
 # }
 
 {
-    my $data = $encoder_snappy->encode([ "a" x 50, { key => "plip" x 50 . "plop" . "foobarbaz" } ]);
+    my $data = $encoder_zlib->encode([ "a" x 500, { key => "plip" x 500 . "plop" . "foobarbaz", a => [ f => g => h => { 1 => [ "r", "foo" ]}] } ]);
+
+    open my $out, '>plop.srl';
+    binmode($out);
+    print $out $data;
+
     my $doc = Sereal::Milk::Document->new(source => \$data);
 
 #    is($doc->body->length, 1, "body has right size");
     use Data::Dumper;
-    print Dumper($doc->header->encoding_type_is_snappy);
 
     print Dumper($doc);
     print Dumper($doc->body);
-    print  "raw body\n";
-    print Dumper($doc->raw_body);
     
-    my $body_fh = $doc->_get_uncompressed_body_fh;
+    my $body_fh = $doc->body->_content_fh;
     my $content = do { local $/; scalar(<$body_fh>) };
     print Dumper($content);
+    print Dumper($doc->body->length);
+
+    print STDERR Dumper($doc->body->maybe_match_in_strings(qr/foobar/));
+    print STDERR Dumper($doc->body->match_in_strings(qr/foobar/));
 
     # my $raw_data = $doc->_get_uncompressed_body_data();
     # print Dumper($raw_data);
